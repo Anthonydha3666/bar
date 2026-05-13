@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mapa marítimo scroll</title>
+
+  <style>
+
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+    }
+
+    body{
+      background:#000;
+      height:500vh;
+      overflow-x:hidden;
+      font-family:Arial, Helvetica, sans-serif;
+    }
+
+    canvas{
+      position:fixed;
+      top:0;
+      left:0;
+    }
+
+    .station{
+      position:fixed;
+      bottom:40px;
+      left:50%;
+      transform:translateX(-50%);
+      z-index:100;
+      color:white;
+      font-size:28px;
+      letter-spacing:3px;
+      padding:14px 24px;
+      border-radius:14px;
+      background:rgba(0,0,0,.55);
+      backdrop-filter:blur(10px);
+      border:1px solid rgba(255,255,255,.2);
+    }
+
+  </style>
+</head>
+
+<body>
+
+  <div class="station" id="stationName">
+    INICIO
+  </div>
+
+  <script type="module">
+
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js';
+
+    // ------------------------------------------------
+    // ESCENA
+    // ------------------------------------------------
+
+    const scene = new THREE.Scene();
+
+    const zoom = 2; // Ajusta este valor para acercar o alejar el mapa
+
+    const camera = new THREE.OrthographicCamera(
+      window.innerWidth / -2 / zoom,
+      window.innerWidth / 2 / zoom,
+      window.innerHeight / 2 / zoom,
+      window.innerHeight / -2 / zoom,
+      1,
+      5000
+    );
+
+    camera.position.z = 1000;
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias:true,
+      alpha:true
+    });
+
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+
+    document.body.appendChild(renderer.domElement);
+
+    // ------------------------------------------------
+    // MAPA
+    // ------------------------------------------------
+    // CAMBIA ESTA IMAGEN POR TU MAPA
+    // Guarda tu imagen como:
+    //
+    // mapa.png
+    //
+    // en la misma carpeta del HTML
+
+    const loader = new THREE.TextureLoader();
+
+    const mapTexture = loader.load('./mapa.png');
+
+    const mapGeometry = new THREE.PlaneGeometry(2200, 900);
+
+    const mapMaterial = new THREE.MeshBasicMaterial({
+      map:mapTexture
+    });
+
+    const map = new THREE.Mesh(
+      mapGeometry,
+      mapMaterial
+    );
+
+    scene.add(map);
+
+    // ------------------------------------------------
+    // RUTA
+    // ------------------------------------------------
+    // Ajusta los puntos para seguir
+    // la línea roja de tu mapa
+
+    const routePoints = [
+
+      new THREE.Vector3(-980, 120, 10),
+      new THREE.Vector3(-760, 260, 10),
+      new THREE.Vector3(-540, 220, 10),
+      new THREE.Vector3(-300, 120, 10),
+      new THREE.Vector3(-100, -20, 10),
+      new THREE.Vector3(80, -40, 10),
+      new THREE.Vector3(260, 40, 10),
+      new THREE.Vector3(520, 180, 10),
+      new THREE.Vector3(760, 260, 10)
+
+    ];
+
+    const curve = new THREE.CatmullRomCurve3(routePoints);
+
+    // ------------------------------------------------
+    // LINEA ROJA
+    // ------------------------------------------------
+
+    const routeGeometry =
+      new THREE.BufferGeometry().setFromPoints(
+        curve.getPoints(400)
+      );
+
+    const routeMaterial =
+      new THREE.LineDashedMaterial({
+        color:0xff0000,
+        dashSize:15,
+        gapSize:10
+      });
+
+    const route =
+      new THREE.Line(
+        routeGeometry,
+        routeMaterial
+      );
+
+    route.computeLineDistances();
+
+    scene.add(route);
+
+    // ------------------------------------------------
+    // BARCO
+    // ------------------------------------------------
+
+    const shipGroup = new THREE.Group();
+
+    // cuerpo barco
+    const bodyGeometry =
+      new THREE.BoxGeometry(50, 18, 8);
+
+    const bodyMaterial =
+      new THREE.MeshBasicMaterial({
+        color:0xffffff
+      });
+
+    const body =
+      new THREE.Mesh(
+        bodyGeometry,
+        bodyMaterial
+      );
+
+    shipGroup.add(body);
+
+    // punta barco
+    const noseGeometry =
+      new THREE.ConeGeometry(10, 25, 3);
+
+    const noseMaterial =
+      new THREE.MeshBasicMaterial({
+        color:0xffffff
+      });
+
+    const nose =
+      new THREE.Mesh(
+        noseGeometry,
+        noseMaterial
+      );
+
+    nose.rotation.z = -Math.PI / 2;
+    nose.position.x = 35;
+
+    shipGroup.add(nose);
+
+    scene.add(shipGroup);
+
+    // ------------------------------------------------
+    // ESTACIONES
+    // ------------------------------------------------
+
+    const stationName =
+      document.getElementById('stationName');
+
+    const stations = [
+
+      {
+        progress:0,
+        name:'PACIFIC'
+      },
+
+      {
+        progress:0.25,
+        name:'ULCC'
+      },
+
+      {
+        progress:0.55,
+        name:'POST PANAMAX'
+      },
+
+      {
+        progress:0.85,
+        name:'ATLANTIC'
+      }
+
+    ];
+
+    // ------------------------------------------------
+    // SCROLL
+    // ------------------------------------------------
+
+    let scrollProgress = 0;
+
+    window.addEventListener('scroll', ()=>{
+
+      const maxScroll =
+        document.body.scrollHeight -
+        window.innerHeight;
+
+      scrollProgress =
+        window.scrollY / maxScroll;
+
+    });
+
+    // ------------------------------------------------
+    // ANIMACIÓN
+    // ------------------------------------------------
+
+    function animate(){
+
+      requestAnimationFrame(animate);
+
+      // posición barco
+      const point =
+        curve.getPoint(scrollProgress);
+
+      shipGroup.position.copy(point);
+
+      // rotación barco
+      const tangent =
+        curve.getTangent(scrollProgress);
+
+      const angle =
+        Math.atan2(
+          tangent.y,
+          tangent.x
+        );
+
+      shipGroup.rotation.z = angle;
+
+      // La cámara sigue al barco suavemente
+      camera.position.x += (point.x - camera.position.x) * 0.05;
+      camera.position.y += (point.y - camera.position.y) * 0.05;
+
+      // estaciones
+      let currentStation =
+        stations[0].name;
+
+      stations.forEach((station)=>{
+
+        if(scrollProgress >= station.progress){
+
+          currentStation =
+            station.name;
+
+        }
+
+      });
+
+      stationName.innerHTML =
+        currentStation;
+
+      renderer.render(scene, camera);
+
+    }
+
+    animate();
+
+    // ------------------------------------------------
+    // RESPONSIVE
+    // ------------------------------------------------
+
+    window.addEventListener('resize', ()=>{
+
+      camera.left =
+        window.innerWidth / -2 / zoom;
+
+      camera.right =
+        window.innerWidth / 2 / zoom;
+
+      camera.top =
+        window.innerHeight / 2 / zoom;
+
+      camera.bottom =
+        window.innerHeight / -2 / zoom;
+
+      camera.updateProjectionMatrix();
+
+      renderer.setSize(
+        window.innerWidth,
+        window.innerHeight
+      );
+
+    });
+
+  </script>
+
+</body>
+</html>
